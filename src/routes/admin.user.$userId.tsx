@@ -32,9 +32,9 @@ function AdminUserDetail() {
     try {
       const { verifyAdminPasswordFn } = await import("@/server/adminFns");
       const result = await verifyAdminPasswordFn({ data: { password: passInput } });
-      if (result.ok) {
+      if (result.ok && result.token) {
         sessionStorage.setItem("adminAuth", "true");
-        sessionStorage.setItem("adminPass", passInput);
+        sessionStorage.setItem("adminToken", result.token);
         setAuthenticated(true);
         setPassError(false);
       } else {
@@ -51,9 +51,10 @@ function AdminUserDetail() {
     (async () => {
       try {
         const { getUserByIdFn, getAllUsersAdminFn } = await import("@/server/userFns");
+        const token = sessionStorage.getItem("adminToken") ?? "";
         const [found, all] = await Promise.all([
           getUserByIdFn({ data: { userId } }),
-          getAllUsersAdminFn({ data: { password: sessionStorage.getItem("adminPass") ?? "" } }),
+          getAllUsersAdminFn({ data: { token } }),
         ]);
         if (!found) {
           setNotFound(true);

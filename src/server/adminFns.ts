@@ -8,14 +8,25 @@ import { createCanvas, loadImage, registerFont } from "canvas";
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkRateLimit, getClientIp, issueAdminToken, requireAdminToken } from "./security";
 
 // ── Admin Auth ─────────────────────────────────────────────────────────────────
-/** Verify admin password on the server (compares against ADMIN_PASSWORD env var). */
+/**
+ * Verify admin password on the server (compares against ADMIN_PASSWORD env var).
+ * Fails closed: if ADMIN_PASSWORD is unset, no password will ever match.
+ * Rate-limited per IP to slow down brute-force guessing.
+ * On success, issues a short-lived signed token — the client uses this token for
+ * subsequent admin calls instead of resending/storing the raw password.
+ */
 export const verifyAdminPasswordFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => z.object({ password: z.string() }).parse(data))
   .handler(async ({ data }) => {
-    const expected = process.env.ADMIN_PASSWORD ?? "admin123";
-    return { ok: data.password === expected };
+    await checkRateLimit(`admin-login:${getClientIp()}`, 10, 600);
+    const expected = process.env.ADMIN_PASSWORD;
+    if (!expected || data.password !== expected) {
+      return { ok: false };
+    }
+    return { ok: true, token: issueAdminToken() };
   });
 
 // ── Admin Log ──────────────────────────────────────────────────────────────────
@@ -30,6 +41,7 @@ export interface AdminLog {
 }
 
 const addLogSchema = z.object({
+  token: z.string(),
   action: z.string().min(1),
   details: z.string(),
 });
@@ -57,24 +69,11 @@ const getCountryName = (countryCode: string): string => {
   }
 };
 
-const getClientIp = (): string => {
-  const headers = getRequestHeaders();
-  const forwardedFor = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-
-  return (
-    headers.get("cf-connecting-ip") ??
-    headers.get("true-client-ip") ??
-    headers.get("x-real-ip") ??
-    headers.get("x-client-ip") ??
-    forwardedFor ??
-    "Unknown"
-  );
-};
-
-/** Append a new admin log entry — logs are never deleted. */
+/** Append a new admin log entry — logs are never deleted. Requires a valid admin session token. */
 export const addAdminLogFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => addLogSchema.parse(data))
   .handler(async ({ data }) => {
+    requireAdminToken(data.token);
     const db = await getDb();
     const country = getClientCountry();
     const entry: AdminLog = {
@@ -90,16 +89,20 @@ export const addAdminLogFn = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Fetch all admin logs, newest first. Logs are read-only — no delete endpoint exists. */
-export const getAdminLogsFn = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await getDb();
-  const docs = await db
-    .collection<AdminLog & { _id: unknown }>("admin_logs")
-    .find({})
-    .sort({ timestamp: -1 })
-    .toArray();
-  return docs.map(({ _id: _unused, ...rest }) => rest as AdminLog);
-});
+/** Fetch admin logs, newest first (capped at 2000 to avoid unbounded memory use). Requires a valid admin session token. */
+export const getAdminLogsFn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ token: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    requireAdminToken(data.token);
+    const db = await getDb();
+    const docs = await db
+      .collection<AdminLog & { _id: unknown }>("admin_logs")
+      .find({})
+      .sort({ timestamp: -1 })
+      .limit(2000)
+      .toArray();
+    return docs.map(({ _id: _unused, ...rest }) => rest as AdminLog);
+  });
 
 // ── Platform Settings ──────────────────────────────────────────────────────────
 export interface PlatformSettings {
@@ -115,6 +118,7 @@ export interface PlatformSettings {
 }
 
 const settingsSchema = z.object({
+  token: z.string(),
   ga4: z.string(),
   metaPixel: z.string(),
   clarity: z.string(),
@@ -126,21 +130,24 @@ const settingsSchema = z.object({
   campaignStartDate: z.string().default(""),
 });
 
+/** Requires a valid admin session token — settings include the reCAPTCHA secret key. */
 export const savePlatformSettingsFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => settingsSchema.parse(data))
   .handler(async ({ data }) => {
+    requireAdminToken(data.token);
+    const { token: _token, ...settings } = data;
     const db = await getDb();
     await db
       .collection("platform_settings")
       .updateOne(
         { _key: "main" },
-        { $set: { _key: "main", ...data, updatedAt: new Date().toISOString() } },
+        { $set: { _key: "main", ...settings, updatedAt: new Date().toISOString() } },
         { upsert: true },
       );
     return { ok: true };
   });
 
-export const getPlatformSettingsFn = createServerFn({ method: "GET" }).handler(async () => {
+async function loadPlatformSettings(): Promise<PlatformSettings> {
   const db = await getDb();
   const doc = await db.collection("platform_settings").findOne({ _key: "main" });
   if (!doc)
@@ -179,7 +186,25 @@ export const getPlatformSettingsFn = createServerFn({ method: "GET" }).handler(a
       typeof rest.leaderboardAdminEmail === "string" ? rest.leaderboardAdminEmail : "",
     campaignStartDate: typeof rest.campaignStartDate === "string" ? rest.campaignStartDate : "",
   } as PlatformSettings;
+}
+
+/**
+ * Public settings for rendering the homepage (analytics IDs, announcement text, reCAPTCHA
+ * *site* key). Never includes recaptchaSecret — that must only reach the admin panel.
+ */
+export const getPlatformSettingsFn = createServerFn({ method: "GET" }).handler(async () => {
+  const settings = await loadPlatformSettings();
+  const { recaptchaSecret: _secret, ...publicSettings } = settings;
+  return { ...publicSettings, recaptchaSecret: "" } as PlatformSettings;
 });
+
+/** Full settings including the reCAPTCHA secret — requires a valid admin session token. */
+export const getPlatformSettingsAdminFn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ token: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    requireAdminToken(data.token);
+    return loadPlatformSettings();
+  });
 
 const GMAIL_SMTP_HOST = "smtp.gmail.com";
 const GMAIL_SMTP_PORT = 465;
@@ -387,69 +412,88 @@ const parseAdminEmails = (input: string): string[] =>
 const formatUaeDate = (d: Date): string =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dubai" }).format(d);
 
-export const lockDailyTopTenAndNotifyFn = createServerFn({ method: "POST" }).handler(async () => {
-  const db = await getDb();
-  const settingsDoc = await db.collection("platform_settings").findOne({ _key: "main" });
-  const settings = (settingsDoc ?? {}) as Partial<PlatformSettings>;
-  const lockDate = formatUaeDate(new Date());
+export const lockDailyTopTenAndNotifyFn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ token: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    requireAdminToken(data.token);
+    const db = await getDb();
+    const settingsDoc = await db.collection("platform_settings").findOne({ _key: "main" });
+    const settings = (settingsDoc ?? {}) as Partial<PlatformSettings>;
+    const lockDate = formatUaeDate(new Date());
 
-  const users = await db.collection<UserRecord>("users").find({}).toArray();
-  const ranked = users
-    // A user can only win once ever — exclude anyone who already has a prior
-    // winnerLockDates entry (matches the admin dashboard's Date-wise preview,
-    // which already excludes past winners from the live/unlocked leaderboard).
-    .filter((u) => !(u.winnerLockDates && u.winnerLockDates.length > 0))
-    .map((u) => {
-      const todayAttempts = (u.playAttempts ?? []).filter((a) => a.date === lockDate);
-      const best = todayAttempts.reduce<number>((m, a) => Math.max(m, a.total), -1);
-      // Earliest attempt that achieved the best score (tiebreaker)
-      const firstBestAt = todayAttempts
-        .filter((a) => a.total === best)
-        .reduce<string>((min, a) => (!min || a.playedAt < min ? a.playedAt : min), "");
-      return { userId: u.userId, name: u.name || u.contact, score: best, firstBestAt };
-    })
-    .filter((u) => u.score >= 0)
-    .sort((a, b) => b.score - a.score || a.firstBestAt.localeCompare(b.firstBestAt))
-    .slice(0, 1);
+    const users = await db.collection<UserRecord>("users").find({}).toArray();
+    const ranked = users
+      // A user can only win once ever — exclude anyone who already has a prior
+      // winnerLockDates entry (matches the admin dashboard's Date-wise preview,
+      // which already excludes past winners from the live/unlocked leaderboard).
+      .filter((u) => !(u.winnerLockDates && u.winnerLockDates.length > 0))
+      .map((u) => {
+        const todayAttempts = (u.playAttempts ?? []).filter((a) => a.date === lockDate);
+        const best = todayAttempts.reduce<number>((m, a) => Math.max(m, a.total), -1);
+        // Earliest attempt that achieved the best score (tiebreaker)
+        const firstBestAt = todayAttempts
+          .filter((a) => a.total === best)
+          .reduce<string>((min, a) => (!min || a.playedAt < min ? a.playedAt : min), "");
+        return { userId: u.userId, name: u.name || u.contact, score: best, firstBestAt };
+      })
+      .filter((u) => u.score >= 0)
+      .sort((a, b) => b.score - a.score || a.firstBestAt.localeCompare(b.firstBestAt))
+      .slice(0, 1);
 
-  if (!ranked.length) return { ok: true, lockDate, winners: 0, mailed: false };
+    if (!ranked.length) return { ok: true, lockDate, winners: 0, mailed: false };
 
-  await Promise.all(
-    ranked.map((winner) =>
-      db
-        .collection<UserRecord>("users")
-        .updateOne({ userId: winner.userId }, { $addToSet: { winnerLockDates: lockDate } }),
-    ),
-  );
+    await Promise.all(
+      ranked.map((winner) =>
+        db
+          .collection<UserRecord>("users")
+          .updateOne({ userId: winner.userId }, { $addToSet: { winnerLockDates: lockDate } }),
+      ),
+    );
 
-  const adminEmails = parseAdminEmails(settings.leaderboardAdminEmail || "");
-  if (!adminEmails.length) {
-    return { ok: true, lockDate, winners: ranked.length, mailed: false };
-  }
-  const dayName = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Dubai",
-    weekday: "long",
-  }).format(new Date(`${lockDate}T12:00:00+04:00`));
-  const enrichedSubject = `Winner Locked: ${lockDate} (${dayName}) UAE`;
-  const winner = ranked[0];
-  const text = `Daily Winner\n\n${winner.name} — Score: ${winner.score}`;
-  const winnersPng = await generateWinnersPng(ranked);
-  await Promise.all(
-    adminEmails.map((email) =>
-      sendViaGmailSmtp(email, enrichedSubject, text, {
-        filename: `revital-winner-${lockDate}.png`,
-        contentType: "image/png",
-        content: winnersPng,
-      }),
-    ),
-  );
-  return { ok: true, lockDate, winners: ranked.length, mailed: true, adminEmails };
-});
+    const adminEmails = parseAdminEmails(settings.leaderboardAdminEmail || "");
+    if (!adminEmails.length) {
+      return { ok: true, lockDate, winners: ranked.length, mailed: false };
+    }
+    const dayName = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Dubai",
+      weekday: "long",
+    }).format(new Date(`${lockDate}T12:00:00+04:00`));
+    const enrichedSubject = `Winner Locked: ${lockDate} (${dayName}) UAE`;
+    const winner = ranked[0];
+    const text = `Daily Winner\n\n${winner.name} — Score: ${winner.score}`;
+    const winnersPng = await generateWinnersPng(ranked);
+    await Promise.all(
+      adminEmails.map((email) =>
+        sendViaGmailSmtp(email, enrichedSubject, text, {
+          filename: `revital-winner-${lockDate}.png`,
+          contentType: "image/png",
+          content: winnersPng,
+        }),
+      ),
+    );
+    return { ok: true, lockDate, winners: ranked.length, mailed: true, adminEmails };
+  });
 
 export const getGlobalLeaderboardFn = createServerFn({ method: "GET" }).handler(async () => {
   const db = await getDb();
+  // Projected: this computation only needs name/contact/scores/refer data — never email/address.
   const [users, settingsDoc] = await Promise.all([
-    db.collection<UserRecord>("users").find({}).toArray(),
+    db
+      .collection<UserRecord>("users")
+      .find(
+        {},
+        {
+          projection: {
+            name: 1,
+            contact: 1,
+            category: 1,
+            playAttempts: 1,
+            referCount: 1,
+            createdAt: 1,
+          },
+        },
+      )
+      .toArray(),
     db.collection("platform_settings").findOne({ _key: "main" }),
   ]);
   const settings = (settingsDoc ?? {}) as Partial<PlatformSettings>;

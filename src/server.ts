@@ -28,6 +28,21 @@ const ssrHandler = createStartHandler(defaultStreamHandler);
 
 const port = Number(process.env.PORT) || 3000;
 
+/**
+ * Baseline security headers applied to every response. Deliberately does NOT set
+ * a Content-Security-Policy: the site loads GA4, Meta Pixel, Microsoft Clarity,
+ * Google Sign-In, and reCAPTCHA from third-party origins, and a CSP tight enough
+ * to matter would need to be authored and visually verified against all of those
+ * integrations rather than guessed at blind.
+ */
+function applySecurityHeaders(headers: Headers): void {
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+}
+
 function getCacheControl(pathname: string): string {
   // Vite emits fingerprinted files like `/assets/index-abc123.js`.
   // These are safe to cache for a long time.
@@ -44,6 +59,10 @@ serve({
   fetch: async (req: Request) => {
     const { pathname } = new URL(req.url);
 
+    if (pathname === "/healthz") {
+      return new Response("ok", { status: 200, headers: { "Cache-Control": "no-store" } });
+    }
+
     // Try static file serving from `dist/client` first.
     const resolvedPath = resolve(join(clientDir, pathname.slice(1)));
     const rel = relative(clientDir, resolvedPath);
@@ -53,12 +72,12 @@ serve({
       try {
         const data = await readFile(resolvedPath);
         const ext = extname(resolvedPath).toLowerCase();
-        return new Response(data, {
-          headers: {
-            "Content-Type": MIME[ext] ?? "application/octet-stream",
-            "Cache-Control": getCacheControl(pathname),
-          },
+        const headers = new Headers({
+          "Content-Type": MIME[ext] ?? "application/octet-stream",
+          "Cache-Control": getCacheControl(pathname),
         });
+        applySecurityHeaders(headers);
+        return new Response(data, { headers });
       } catch {
         // file not found — fall through to SSR (will 404 via router)
       }
@@ -71,6 +90,7 @@ serve({
     if (!headers.has("Cache-Control")) {
       headers.set("Cache-Control", "no-store");
     }
+    applySecurityHeaders(headers);
 
     return new Response(response.body, {
       status: response.status,
