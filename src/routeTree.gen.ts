@@ -9,59 +9,24 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as RulesRouteImport } from './routes/rules'
-import { Route as RetrieveRouteImport } from './routes/retrieve'
-import { Route as ResultRouteImport } from './routes/result'
-import { Route as ProfileRouteImport } from './routes/profile'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as ChallengesRouteImport } from './routes/challenges'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as PlayReflexRouteImport } from './routes/play.reflex'
-import { Route as PlayMemoryRouteImport } from './routes/play.memory'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ChallengesRouteImport } from './routes/challenges'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as ResultRouteImport } from './routes/result'
+import { Route as RetrieveRouteImport } from './routes/retrieve'
+import { Route as RulesRouteImport } from './routes/rules'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as PlayBalanceRouteImport } from './routes/play.balance'
+import { Route as PlayMemoryRouteImport } from './routes/play.memory'
+import { Route as PlayReflexRouteImport } from './routes/play.reflex'
 import { Route as AdminUserUserIdRouteImport } from './routes/admin.user.$userId'
 
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RulesRoute = RulesRouteImport.update({
-  id: '/rules',
-  path: '/rules',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RetrieveRoute = RetrieveRouteImport.update({
-  id: '/retrieve',
-  path: '/retrieve',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResultRoute = ResultRouteImport.update({
-  id: '/result',
-  path: '/result',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProfileRoute = ProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChallengesRoute = ChallengesRouteImport.update({
-  id: '/challenges',
-  path: '/challenges',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -69,14 +34,49 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlayReflexRoute = PlayReflexRouteImport.update({
-  id: '/play/reflex',
-  path: '/play/reflex',
+const ChallengesRoute = ChallengesRouteImport.update({
+  id: '/challenges',
+  path: '/challenges',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResultRoute = ResultRouteImport.update({
+  id: '/result',
+  path: '/result',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetrieveRoute = RetrieveRouteImport.update({
+  id: '/retrieve',
+  path: '/retrieve',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RulesRoute = RulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlayBalanceRoute = PlayBalanceRouteImport.update({
+  id: '/play/balance',
+  path: '/play/balance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlayMemoryRoute = PlayMemoryRouteImport.update({
@@ -84,9 +84,9 @@ const PlayMemoryRoute = PlayMemoryRouteImport.update({
   path: '/play/memory',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlayBalanceRoute = PlayBalanceRouteImport.update({
-  id: '/play/balance',
-  path: '/play/balance',
+const PlayReflexRoute = PlayReflexRouteImport.update({
+  id: '/play/reflex',
+  path: '/play/reflex',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminUserUserIdRoute = AdminUserUserIdRouteImport.update({
@@ -213,60 +213,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/rules': {
-      id: '/rules'
-      path: '/rules'
-      fullPath: '/rules'
-      preLoaderRoute: typeof RulesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/retrieve': {
-      id: '/retrieve'
-      path: '/retrieve'
-      fullPath: '/retrieve'
-      preLoaderRoute: typeof RetrieveRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/result': {
-      id: '/result'
-      path: '/result'
-      fullPath: '/result'
-      preLoaderRoute: typeof ResultRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/profile': {
-      id: '/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof ProfileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/challenges': {
-      id: '/challenges'
-      path: '/challenges'
-      fullPath: '/challenges'
-      preLoaderRoute: typeof ChallengesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -276,18 +227,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/play/reflex': {
-      id: '/play/reflex'
-      path: '/play/reflex'
-      fullPath: '/play/reflex'
-      preLoaderRoute: typeof PlayReflexRouteImport
+    '/challenges': {
+      id: '/challenges'
+      path: '/challenges'
+      fullPath: '/challenges'
+      preLoaderRoute: typeof ChallengesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/result': {
+      id: '/result'
+      path: '/result'
+      fullPath: '/result'
+      preLoaderRoute: typeof ResultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retrieve': {
+      id: '/retrieve'
+      path: '/retrieve'
+      fullPath: '/retrieve'
+      preLoaderRoute: typeof RetrieveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rules': {
+      id: '/rules'
+      path: '/rules'
+      fullPath: '/rules'
+      preLoaderRoute: typeof RulesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/play/balance': {
+      id: '/play/balance'
+      path: '/play/balance'
+      fullPath: '/play/balance'
+      preLoaderRoute: typeof PlayBalanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/play/memory': {
@@ -297,11 +297,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayMemoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/play/balance': {
-      id: '/play/balance'
-      path: '/play/balance'
-      fullPath: '/play/balance'
-      preLoaderRoute: typeof PlayBalanceRouteImport
+    '/play/reflex': {
+      id: '/play/reflex'
+      path: '/play/reflex'
+      fullPath: '/play/reflex'
+      preLoaderRoute: typeof PlayReflexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/user/$userId': {
